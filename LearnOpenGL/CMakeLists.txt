@@ -3,7 +3,7 @@
 #
 
 # Add source to this project's executable.
-add_executable (LearnOpenGL "LearnOpenGL.cpp" "LearnOpenGL.h")
+add_executable (LearnOpenGL "LearnOpenGL.cpp" "LearnOpenGL.h" "ShaderProgram.cpp" "ShaderProgram.h")
 
 target_link_libraries(LearnOpenGL glfw3 imgui)
 

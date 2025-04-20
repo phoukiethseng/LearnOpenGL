@@ -4,6 +4,8 @@
 #pragma once
 
 #include <iostream>
+#include <fstream>
+#include <string>
 #include "glad/glad.h" // include glad before GLFW
 #include "GLFW/glfw3.h"
 

@@ -1,35 +1,17 @@
 ﻿// LearnGLFW.cpp : Defines the entry point for the application.
-//
 
 #include "LearnOpenGL.h"
+#include "ShaderProgram.h"
 
 // Global State
 ImGuiContext* g_ImGuiContext = nullptr;
 float g_scaleFactor = 1.25f;
 bool g_quitProgram = false;
 
-// Shader sources
-std::string vertexShaderSource(
-	"#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "}\0"
-);
-std::string fragmentShaderSource(
-	"#version 330 core\n"
-	"out vec4 FragColor;\n"
-	"void main()\n"
-	"{\n"
-	"	FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-	"}\0"
-);
-
 void MakeUI();
 void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style);
-GLuint PrepareBuffer();
-GLuint CreateShaderProgram(std::string& vertexShaderSource, std::string& fragmentShaderSource);
+void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer);
+std::string LoadShaderFromFile(std::string filepath);
 
 int main() {
 	if (glfwInit() == GLFW_FALSE) {
@@ -48,7 +30,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	
 
-	GLFWwindow* window = glfwCreateWindow(1000, 600, "LearnOpenGL", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(1000, 800, "LearnOpenGL", nullptr, nullptr);
 
 	// Tell GLFW to use OpenGL context of specified window to be current context
 	glfwMakeContextCurrent(window);
@@ -60,8 +42,11 @@ int main() {
 		return -1;
 	} 
 
-	GLuint vertexArray = PrepareBuffer();
-	GLuint shaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
+	unsigned int vertexArray, indexBuffer;
+	PrepareBuffer(&vertexArray, &indexBuffer);
+	std::string vertexShaderSource = LoadShaderFromFile("res/shaders/vertex.shader");
+	std::string fragmentShaderSource = LoadShaderFromFile("res/shaders/fragment.shader");
+	ShaderProgram shaderProgram(vertexShaderSource, fragmentShaderSource);
 
 	// Tell ImGui to use 
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -75,6 +60,8 @@ int main() {
 	CustomizeImGui(io, style);
 	io.FontGlobalScale = g_scaleFactor;
 
+	float rgb[] = { 0.0f, 0.0f, 0.0f };
+
 	glfwSwapInterval(1);
 	while (!g_quitProgram && !glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -83,8 +70,11 @@ int main() {
 		ImGui::NewFrame();
 
 		ImGui::PushFont(mainFont);
-		MakeUI();
+		//MakeUI();
+		ImGui::Begin("Shader Parameters");
+		ImGui::ColorPicker3("Uniform Color", rgb);
 		ImGui::ShowDemoWindow();
+		ImGui::End();
 		ImGui::PopFont();
 
 		ImGui::EndFrame();
@@ -96,9 +86,11 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw Triangle using vertex array we created
-		glUseProgram(shaderProgram);
+		shaderProgram.use();
+		shaderProgram.setVec("u_Color", { rgb[0], rgb[1], rgb[2], 0.0f });
 		glBindVertexArray(vertexArray);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, nullptr);
 		
 		ImGui_ImplOpenGL3_RenderDrawData(drawData);
 		glfwSwapBuffers(window);
@@ -122,9 +114,6 @@ void MakeUI()
 			EndMenu();
 		}
 
-		ImGuiWindowFlags flag = ImGuiWindowFlags_NoCollapse;
-		Begin("Settings", NULL, flag);
-		End();
 		EndMainMenuBar();
 	}
 }
@@ -135,17 +124,28 @@ void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style)
 	style.ScaleAllSizes(g_scaleFactor);
 }
 
-GLuint PrepareBuffer()
+void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer)
 {
 	float trianglePositions[] = {
 		// Vertex pos			    // Vertex color
 		-0.5f, -0.5f,  0.0f,		1.0f, 0.0f, 0.0f,
 		 0.5f, -0.5f,  0.0f,		0.0f, 1.0f, 0.0f,
-		 0.0f,  0.5f,  0.0f,		0.0f, 0.0f, 1.0f,
+		 0.5f,  0.5f,  0.0f,		0.0f, 0.0f, 1.0f,
+
+		-0.5f,  0.5f,  0.0f,		0.0f, 0.2f, 0.0f,
+	};
+
+	unsigned int indices[]{
+		1, 2, 0, 3
 	};
 	
 	GLuint vertexBuffer;
 	GLuint vertexArray;
+	GLuint indexBuffer;
+
+	glGenBuffers(1, &indexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
 	glGenBuffers(1, &vertexBuffer); // Create buffer object for our triangle
 	glGenVertexArrays(1, &vertexArray);
@@ -173,50 +173,23 @@ GLuint PrepareBuffer()
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	
-	return vertexArray;
+	*o_vertexArray = vertexArray;
+	*o_indexBuffer = indexBuffer;
 }
 
-GLuint CreateShaderProgram(std::string& vertexShaderSource, std::string& fragmentShaderSource)
+std::string LoadShaderFromFile(std::string filepath)
 {
-	// Create Shader Object
-	uint32_t vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	uint32_t fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-
-	// Bind shader source to its object
-	const char* vertexShaderSourceConstStr = vertexShaderSource.c_str();
-	glShaderSource(vertexShader, 1, &vertexShaderSourceConstStr, NULL);
-	const char* fragmentShaderSourceConstStr = fragmentShaderSource.c_str();
-	glShaderSource(fragmentShader, 1, &fragmentShaderSourceConstStr, NULL);
-	
-	int success;
-	char infoLog[512];
-
-	// Compile the shader
-	glCompileShader(vertexShader);
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-	if(!success)
-	{
-		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-	glCompileShader(fragmentShader);
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-	if(!success)
-	{
-		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+	std::ifstream shaderFile(filepath);
+	if (!shaderFile.is_open()) {
+		std::cout << "Cannot load shader file " << filepath << "\n";
 	}
 
-	
-	// Create shader program and link with vertex and fragment shader
-	uint32_t shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
+	std::string shaderSource;
+	std::string line;
+	while (std::getline(shaderFile, line)) {
+		shaderSource.append(line + "\n");
+	}
+	shaderFile.close();
 
-	// Delete compiled shader object
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
-
-	return shaderProgram;
+	return shaderSource;
 }
