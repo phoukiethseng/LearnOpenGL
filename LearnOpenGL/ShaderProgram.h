@@ -8,8 +8,7 @@ class ShaderProgram {
 private:
 	unsigned int m_programID;
 public:
-	explicit ShaderProgram(ShaderProgram& program);
-	ShaderProgram(std::string& vertexShaderSource, std::string& fragmentShaderSouce);
+	ShaderProgram(const std::string& vertexShaderSource, const std::string& fragmentShaderSouce);
 	~ShaderProgram();
 	
 	bool use();

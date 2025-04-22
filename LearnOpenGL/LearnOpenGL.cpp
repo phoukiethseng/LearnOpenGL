@@ -1,24 +1,34 @@
 ﻿// LearnGLFW.cpp : Defines the entry point for the application.
 
 #include "LearnOpenGL.h"
+#include <memory>
 #include "ShaderProgram.h"
+#include "ErrorHandling.h"
+#include "VertexBuffer.h"
+#include "IndexBuffer.h"
 
 // Global State
 ImGuiContext* g_ImGuiContext = nullptr;
 float g_scaleFactor = 1.25f;
 bool g_quitProgram = false;
 
+int g_windowWidth = 800;
+int g_windowHeight = 600;
+
 void MakeUI();
 void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style);
-void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer);
+void PrepareBuffer(std::shared_ptr<GLuint>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer);
 std::string LoadShaderFromFile(std::string filepath);
 
-int main() {
-	if (glfwInit() == GLFW_FALSE) {
-		std::cout << "Failed to Initialized GLFW" << std::endl;
-		return -1;
-	}
-	std::cout << "GLFW: " << glfwGetVersionString() << std::endl;
+void UpdateWindowWidthAndHeight(GLFWwindow* p_window, int width, int height) {
+	using namespace std;
+	//cout << "Window size changed to " << width << "," << height << endl;
+	g_windowWidth = width;
+	g_windowHeight = height;
+	GLCall(glViewport(0, 0, width, height)); // Tell OpenGL to resize its frame buffer
+}
+
+int Run() {
 
 	// Imgui init
 	g_ImGuiContext = ImGui::CreateContext();
@@ -29,8 +39,9 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	
-
-	GLFWwindow* window = glfwCreateWindow(1000, 800, "LearnOpenGL", nullptr, nullptr);
+	// Create window and set callbacks
+	GLFWwindow* window = glfwCreateWindow(g_windowWidth, g_windowHeight, "LearnOpenGL", nullptr, nullptr);
+	glfwSetFramebufferSizeCallback(window, UpdateWindowWidthAndHeight);
 
 	// Tell GLFW to use OpenGL context of specified window to be current context
 	glfwMakeContextCurrent(window);
@@ -42,13 +53,14 @@ int main() {
 		return -1;
 	} 
 
-	unsigned int vertexArray, indexBuffer;
-	PrepareBuffer(&vertexArray, &indexBuffer);
-	std::string vertexShaderSource = LoadShaderFromFile("res/shaders/vertex.shader");
-	std::string fragmentShaderSource = LoadShaderFromFile("res/shaders/fragment.shader");
-	ShaderProgram shaderProgram(vertexShaderSource, fragmentShaderSource);
+	std::shared_ptr<IndexBuffer> indexBuffer;
+	std::shared_ptr<unsigned int> vertexArray;
+	std::shared_ptr<VertexBuffer> vertexBuffer;
+	PrepareBuffer(vertexArray, indexBuffer, vertexBuffer);
+	ShaderProgram shaderProgram(LoadShaderFromFile("res/shaders/vertex.shader"),
+								LoadShaderFromFile("res/shaders/fragment.shader"));
 
-	// Tell ImGui to use 
+	// Tell ImGui to use our window for rendering
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init();
 
@@ -88,8 +100,9 @@ int main() {
 		// Draw Triangle using vertex array we created
 		shaderProgram.use();
 		shaderProgram.setVec("u_Color", { rgb[0], rgb[1], rgb[2], 0.0f });
-		glBindVertexArray(vertexArray);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+		shaderProgram.setFloat("u_aspectRatio", (float)g_windowWidth / g_windowHeight);
+		glBindVertexArray(*vertexArray);
+		indexBuffer->Bind();
 		glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, nullptr);
 		
 		ImGui_ImplOpenGL3_RenderDrawData(drawData);
@@ -99,8 +112,17 @@ int main() {
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext(g_ImGuiContext);
+}
+
+int main() {
+	if (glfwInit() == GLFW_FALSE) {
+		std::cout << "Failed to Initialized GLFW" << std::endl;
+		return -1;
+	}
+	std::cout << "GLFW: " << glfwGetVersionString() << std::endl;
+	int retVal = Run();
 	glfwTerminate();
-	return 0;
+	return retVal;
 }
 
 void MakeUI()
@@ -124,7 +146,7 @@ void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style)
 	style.ScaleAllSizes(g_scaleFactor);
 }
 
-void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer)
+void PrepareBuffer(std::shared_ptr<GLuint>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer)
 {
 	float trianglePositions[] = {
 		// Vertex pos			    // Vertex color
@@ -139,19 +161,15 @@ void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer)
 		1, 2, 0, 3
 	};
 	
-	GLuint vertexBuffer;
-	GLuint vertexArray;
-	GLuint indexBuffer;
-
-	glGenBuffers(1, &indexBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	glGenBuffers(1, &vertexBuffer); // Create buffer object for our triangle
+	unsigned int vertexArray;
 	glGenVertexArrays(1, &vertexArray);
 	glBindVertexArray(vertexArray);
-	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer); // Bind that to OpenGL array buffer
-	glBufferData(GL_ARRAY_BUFFER, sizeof(trianglePositions), &trianglePositions, GL_STATIC_DRAW); // Copy buffer data to GPU
+	std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(trianglePositions, 24);
+	std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(indices, 4);
+
+	vertexBuffer->Bind();
+	indexBuffer->Bind();
+
 
 	GLuint vertexStride = 6 * sizeof(float);
 
@@ -172,9 +190,10 @@ void PrepareBuffer(GLuint* o_vertexArray, GLuint* o_indexBuffer)
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexStride, (const void*) (3 * sizeof(float)));
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
-	
-	*o_vertexArray = vertexArray;
-	*o_indexBuffer = indexBuffer;
+
+	o_vertexArray = std::make_shared<unsigned int>(vertexArray);
+	o_indexBuffer = indexBuffer;
+	o_vertexBuffer = vertexBuffer;
 }
 
 std::string LoadShaderFromFile(std::string filepath)
