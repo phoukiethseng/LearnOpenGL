@@ -1,23 +1,36 @@
 ﻿// LearnGLFW.cpp : Defines the entry point for the application.
 
-#include "LearnOpenGL.h"
+#include <iostream>
+#include <fstream>
+#include <string>
 #include <memory>
+#include "glad/glad.h" // include glad before GLFW
+#include "GLFW/glfw3.h"
+
+#define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+
 #include "ShaderProgram.h"
 #include "ErrorHandling.h"
 #include "VertexBuffer.h"
 #include "IndexBuffer.h"
+#include "VertexArray.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 // Global State
 ImGuiContext* g_ImGuiContext = nullptr;
 float g_scaleFactor = 1.25f;
 bool g_quitProgram = false;
 
-int g_windowWidth = 800;
-int g_windowHeight = 600;
+int g_windowWidth = 1280;
+int g_windowHeight = 720;
 
-void MakeUI();
 void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style);
-void PrepareBuffer(std::shared_ptr<GLuint>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer);
+void PrepareBuffer(std::shared_ptr<VertexArray>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer);
 std::string LoadShaderFromFile(std::string filepath);
 
 void UpdateWindowWidthAndHeight(GLFWwindow* p_window, int width, int height) {
@@ -43,7 +56,7 @@ int Run() {
 	GLFWwindow* window = glfwCreateWindow(g_windowWidth, g_windowHeight, "LearnOpenGL", nullptr, nullptr);
 	glfwSetFramebufferSizeCallback(window, UpdateWindowWidthAndHeight);
 
-	// Tell GLFW to use OpenGL context of specified window to be current context
+	// Tell GLFW to Use OpenGL context of specified window to be current context
 	glfwMakeContextCurrent(window);
 
 	// Tell GLAD to initalize
@@ -54,25 +67,30 @@ int Run() {
 	} 
 
 	std::shared_ptr<IndexBuffer> indexBuffer;
-	std::shared_ptr<unsigned int> vertexArray;
+	std::shared_ptr<VertexArray> vertexArray;
 	std::shared_ptr<VertexBuffer> vertexBuffer;
 	PrepareBuffer(vertexArray, indexBuffer, vertexBuffer);
 	ShaderProgram shaderProgram(LoadShaderFromFile("res/shaders/vertex.shader"),
 								LoadShaderFromFile("res/shaders/fragment.shader"));
 
-	// Tell ImGui to use our window for rendering
+	// Tell ImGui to Use our window for rendering
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init();
 
 	// ImGui stlying customization
 	ImGuiIO& io = ImGui::GetIO();
 	ImGuiStyle& style = ImGui::GetStyle();
-	ImFont* mainFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\Arial.ttf", 18.0f);
+	ImFont* mainFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\Arial.ttf", 18.0f * g_scaleFactor);
 	IM_ASSERT(mainFont != NULL);
 	CustomizeImGui(io, style);
-	io.FontGlobalScale = g_scaleFactor;
-
+	
 	float rgb[] = { 0.0f, 0.0f, 0.0f };
+
+	// Brick wall texture
+	unsigned int brickWallTexture;
+	glGenTextures(1, &brickWallTexture);
+	glBindTexture(GL_TEXTURE_2D, brickWallTexture);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 100, 100, 0,)
 
 	glfwSwapInterval(1);
 	while (!g_quitProgram && !glfwWindowShouldClose(window)) {
@@ -82,7 +100,6 @@ int Run() {
 		ImGui::NewFrame();
 
 		ImGui::PushFont(mainFont);
-		//MakeUI();
 		ImGui::Begin("Shader Parameters");
 		ImGui::ColorPicker3("Uniform Color", rgb);
 		ImGui::ShowDemoWindow();
@@ -98,10 +115,10 @@ int Run() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// Draw Triangle using vertex array we created
-		shaderProgram.use();
-		shaderProgram.setVec("u_Color", { rgb[0], rgb[1], rgb[2], 0.0f });
-		shaderProgram.setFloat("u_aspectRatio", (float)g_windowWidth / g_windowHeight);
-		glBindVertexArray(*vertexArray);
+		shaderProgram.Use();
+		shaderProgram.SetVec("u_Color", { rgb[0], rgb[1], rgb[2], 0.0f });
+		shaderProgram.SetFloat("u_aspectRatio", (float)g_windowWidth / g_windowHeight);
+		vertexArray->Bind();
 		indexBuffer->Bind();
 		glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, nullptr);
 		
@@ -120,24 +137,12 @@ int main() {
 		return -1;
 	}
 	std::cout << "GLFW: " << glfwGetVersionString() << std::endl;
-	int retVal = Run();
+	int retVal = 0;
+	{
+		retVal = Run();
+	}
 	glfwTerminate();
 	return retVal;
-}
-
-void MakeUI()
-{
-	using namespace ImGui;
-	if (BeginMainMenuBar()) {
-		if (BeginMenu("File")) {
-			if (MenuItem("Quit")) {
-				g_quitProgram = true;
-			}
-			EndMenu();
-		}
-
-		EndMainMenuBar();
-	}
 }
 
 void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style)
@@ -146,52 +151,32 @@ void CustomizeImGui(ImGuiIO& io, ImGuiStyle& style)
 	style.ScaleAllSizes(g_scaleFactor);
 }
 
-void PrepareBuffer(std::shared_ptr<GLuint>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer)
+void PrepareBuffer(std::shared_ptr<VertexArray>& o_vertexArray, std::shared_ptr<IndexBuffer>& o_indexBuffer, std::shared_ptr<VertexBuffer>& o_vertexBuffer)
 {
-	float trianglePositions[] = {
-		// Vertex pos			    // Vertex color
-		-0.5f, -0.5f,  0.0f,		1.0f, 0.0f, 0.0f,
-		 0.5f, -0.5f,  0.0f,		0.0f, 1.0f, 0.0f,
-		 0.5f,  0.5f,  0.0f,		0.0f, 0.0f, 1.0f,
-
-		-0.5f,  0.5f,  0.0f,		0.0f, 0.2f, 0.0f,
+	float rectanglePos[] = {
+		// Vertex Position	        // Vertex Color			// Texture Coordinate
+		-0.5f, -0.5f,  0.0f,		1.0f, 0.0f, 0.0f,		0.0f, 0.0f,
+		 0.5f, -0.5f,  0.0f,		0.0f, 1.0f, 0.0f,		1.0f, 0.0f,
+		 0.5f,  0.5f,  0.0f,		0.0f, 0.0f, 1.0f,		1.0f, 1.0f,
+		-0.5f,  0.5f,  0.0f,		1.0f, 0.2f, 0.0f,		0.0f, 1.0f
 	};
 
 	unsigned int indices[]{
 		1, 2, 0, 3
 	};
 	
-	unsigned int vertexArray;
-	glGenVertexArrays(1, &vertexArray);
-	glBindVertexArray(vertexArray);
-	std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(trianglePositions, 24);
+	std::shared_ptr<VertexArray> vertexArray = std::make_shared<VertexArray>();
+	std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(rectanglePos, 24);
 	std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(indices, 4);
 
-	vertexBuffer->Bind();
-	indexBuffer->Bind();
+	VertexBufferLayout vertexBufferLayout;
+	vertexBufferLayout.Push<float>(3, true); // Vertex Position
+	vertexBufferLayout.Push<float>(3, true); // Vertex Color
+	vertexBufferLayout.Push<float>(2, true); // Texture Coordinate
 
+	vertexArray->AddBuffer(*vertexBuffer, vertexBufferLayout);
 
-	GLuint vertexStride = 6 * sizeof(float);
-
-	// Vertex position attribute
-	//		attribute index will be 0
-	//		number of component of attribute will be 3 (since it is 3D position vector)
-	//		value already normalized so we pass GL_FALSE
-	//		since a vertex contain 6 unit of floats (3 floats of position and 3 floats of rgb color), the stride will be 6 of 4 bytes float
-	//		offset in bytes within a vertex to the attribute will be 0
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexStride, (const void*)0);
-
-	// Vertex position attribute
-	//		attribute index will be 1
-	//		number of component of attribute will be 3 (since it is RGB values)
-	//		value already normalized so we pass GL_FALSE
-	//		since a vertex contain 5 unit of floats (3 floats of position and 3 floats of rgb color), the stride will be 6 of 4 bytes float
-	//		offset in bytes within a vertex to the attribute will be 3 of 4 bytes float
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexStride, (const void*) (3 * sizeof(float)));
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-
-	o_vertexArray = std::make_shared<unsigned int>(vertexArray);
+	o_vertexArray = vertexArray;
 	o_indexBuffer = indexBuffer;
 	o_vertexBuffer = vertexBuffer;
 }

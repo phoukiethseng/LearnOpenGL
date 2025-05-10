@@ -1,6 +1,9 @@
 #pragma once
 
 class VertexBuffer {
+/**
+	Represent a buffer that store vertices and its attributes.
+**/
 private:
 	unsigned int m_rendererID;
 public:

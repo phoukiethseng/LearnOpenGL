@@ -33,38 +33,38 @@ ShaderProgram::ShaderProgram(const std::string& vertexShaderSource, const std::s
 	GLCall(glAttachShader(program, fragmentShader));
 	glLinkProgram(program);
 
-	m_programID = program;
+	m_rendererID = program;
 }
 
 ShaderProgram::~ShaderProgram()
 {
-	GLCall(glDeleteProgram(m_programID));
+	GLCall(glDeleteProgram(m_rendererID));
 }
 
-bool ShaderProgram::use()
+bool ShaderProgram::Use()
 {
-	GLCall(glUseProgram(m_programID));
+	GLCall(glUseProgram(m_rendererID));
 	return true;
 }
 
-bool ShaderProgram::setInt(std::string name, int value)
+bool ShaderProgram::SetInt(std::string name, int value)
 {
-	GLCall(int uniform = glGetUniformLocation(m_programID, name.c_str()));
+	GLCall(int uniform = glGetUniformLocation(m_rendererID, name.c_str()));
 	GLCall(glUniform1i(uniform, value));
 	return true;
 }
 
-bool ShaderProgram::setFloat(std::string name, float value)
+bool ShaderProgram::SetFloat(std::string name, float value)
 {
-	GLCall(int uniform = glGetUniformLocation(m_programID, name.c_str()));
+	GLCall(int uniform = glGetUniformLocation(m_rendererID, name.c_str()));
 	GLCall(glUniform1f(uniform, value));
 	return true;
 }
 
 
-bool ShaderProgram::setVec(std::string name, std::vector<float> vectors)
+bool ShaderProgram::SetVec(std::string name, std::vector<float> vectors)
 {
-	GLCall(int uniform = glGetUniformLocation(m_programID, name.c_str()));
+	GLCall(int uniform = glGetUniformLocation(m_rendererID, name.c_str()));
 	size_t length = vectors.size();
 	switch (length) {
 	case 2: GLCall(glUniform2f(uniform, vectors[0], vectors[1])); break;

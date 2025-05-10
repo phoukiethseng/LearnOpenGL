@@ -1,6 +1,9 @@
 #pragma once
 
 class IndexBuffer {
+/**
+	Represent a buffer that store indices into vertex buffer.
+**/
 private:
 	unsigned int m_rendererID;
 	unsigned int m_count;
